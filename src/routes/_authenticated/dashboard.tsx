@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -69,9 +69,21 @@ function Dashboard() {
           {company?.industry_type ?? "Emissions ledger ready."}
         </p>
 
-        <div className="mt-10 rounded-md border border-hairline bg-surface p-8 text-sm text-muted-foreground">
-          Account is set up. Scope 1, 2, and 3 entry surfaces will land in the next part.
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-md border border-hairline bg-surface p-6">
+          <div>
+            <div className="text-sm font-medium text-foreground">Record activity</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Log fuel, electricity, freight, or travel. Emissions calculate on save.
+            </p>
+          </div>
+          <Link
+            to="/dashboard/entry"
+            className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            New entry
+          </Link>
         </div>
+
       </main>
     </div>
   );
