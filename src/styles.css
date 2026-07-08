@@ -131,3 +131,13 @@
 @utility hairline-t {
   border-top: 1px solid var(--color-hairline);
 }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .print-area, .print-area * {
+    background: white !important;
+    color: black !important;
+    border-color: #999 !important;
+  }
+}
