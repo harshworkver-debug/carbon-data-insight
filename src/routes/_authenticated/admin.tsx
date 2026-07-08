@@ -1,5 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronLeft, ShieldAlert, Plus, Save, Trash2, ExternalLink } from "lucide-react";
@@ -590,6 +590,3 @@ function FieldLabel({
   );
 }
 
-// Unused imports guard
-void useMemo;
-void useNavigate;
