@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronLeft, ShieldAlert, Plus, Save, Trash2, ExternalLink } from "lucide-react";
+import { ChevronLeft, ShieldAlert, Plus, Save, Trash2, ExternalLink, Copy, KeyRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
