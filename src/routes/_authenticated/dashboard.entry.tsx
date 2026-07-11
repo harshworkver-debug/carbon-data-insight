@@ -301,9 +301,14 @@ function ScopePanel({
       setQuantityError(qErr);
       return;
     }
+    if (!facilityId) {
+      toast.error("Select a facility for this entry.");
+      return;
+    }
     setSubmitting(true);
     const { error } = await supabase.from("ghg_entries").insert({
       company_id: companyId,
+      facility_id: facilityId,
       entered_by: userId,
       scope,
       category: selectedFactor.category,
