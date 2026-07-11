@@ -337,7 +337,28 @@ function ScopePanel({
         <p className="mt-1 text-xs text-muted-foreground">{SCOPE_META[scope].description}</p>
       </div>
 
+      <div className="mb-5">
+        <Field label="Facility" htmlFor={`${scope}-facility`}>
+          <Select value={facilityId} onValueChange={setFacilityId} disabled={facilitiesQ.isLoading}>
+            <SelectTrigger id={`${scope}-facility`}>
+              <SelectValue placeholder={facilitiesQ.isLoading ? "Loading facilities…" : "Select facility"} />
+            </SelectTrigger>
+            <SelectContent>
+              {(facilitiesQ.data ?? []).map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.name} · {f.region}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        {(facilitiesQ.data ?? []).length === 0 && !facilitiesQ.isLoading && (
+          <p className="mt-2 text-xs text-amber-300">
+            No facilities provisioned yet — a global admin must add one under /admin before entries can be recorded.
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
         <Field label="Category" htmlFor={`${scope}-category`}>
           <Select
             value={category}
