@@ -475,24 +475,51 @@ function ScopePanel({
         </div>
       </div>
 
-      {selectedFactor && (
-        <div className="mt-6 rounded-md border border-hairline bg-background/40 p-4 text-xs text-muted-foreground">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              Factor:{" "}
-              <span className="tabular text-foreground">
-                {selectedFactor.co2e_factor}
-              </span>{" "}
-              kg CO₂e / {selectedFactor.unit}
-            </div>
-            {selectedFactor.source && (
-              <div className="text-right text-[11px] text-data-muted">
-                {selectedFactor.source}
+      {selectedFactor && (() => {
+        const qtyNum = Number(quantity);
+        const hasQty = Number.isFinite(qtyNum) && qtyNum > 0;
+        let converted = qtyNum;
+        const fUnit = selectedFactor.unit.toLowerCase();
+        const uUnit = unit.toLowerCase();
+        if (fUnit === "mwh" && uUnit === "kwh") converted = qtyNum / 1000;
+        else if (fUnit === "kwh" && uUnit === "mwh") converted = qtyNum * 1000;
+        const co2eKg = hasQty ? converted * selectedFactor.co2e_factor : 0;
+        const tCo2e = co2eKg / 1000;
+        return (
+          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-hairline bg-background/40 p-4 text-xs text-muted-foreground">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-data-muted">Emission factor</div>
+              <div className="mt-2">
+                <span className="tabular text-foreground">{selectedFactor.co2e_factor}</span>{" "}
+                kg CO₂e / {selectedFactor.unit}
               </div>
-            )}
+              {selectedFactor.source && (
+                <div className="mt-2 text-[11px] text-data-muted">{selectedFactor.source}</div>
+              )}
+            </div>
+            <div className="rounded-md border border-primary/30 bg-primary/[0.06] p-4">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-data-muted">Live estimate</div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-semibold tabular tracking-tight text-foreground">
+                  {tCo2e.toFixed(3)}
+                </span>
+                <span className="text-sm text-muted-foreground">t CO₂e</span>
+              </div>
+              <div className="mt-1 text-[11px] text-data-muted tabular">
+                {hasQty ? (
+                  <>
+                    {converted.toLocaleString(undefined, { maximumFractionDigits: 6 })} {selectedFactor.unit} ×{" "}
+                    {selectedFactor.co2e_factor} = {co2eKg.toFixed(3)} kg CO₂e
+                  </>
+                ) : (
+                  <>Enter a quantity to preview the footprint.</>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       <div className="mt-6 flex items-center justify-between border-t border-hairline pt-5">
         <p className="max-w-md text-[11px] text-muted-foreground">
