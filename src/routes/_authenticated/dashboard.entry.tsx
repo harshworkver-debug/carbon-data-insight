@@ -197,6 +197,8 @@ function EntryPage() {
 }
 
 
+type FacilityOpt = { id: string; name: string; region: string };
+
 function ScopePanel({
   scope,
   companyId,
@@ -220,8 +222,23 @@ function ScopePanel({
     new Date().toISOString().slice(0, 10),
   );
   const [notes, setNotes] = useState<string>("");
+  const [facilityId, setFacilityId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [quantityError, setQuantityError] = useState<string | null>(null);
+
+  const facilitiesQ = useQuery({
+    queryKey: ["entry_facilities", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("facilities")
+        .select("id, name, region")
+        .eq("company_id", companyId)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as FacilityOpt[];
+    },
+  });
+
 
   // Reset dependent fields when scope changes
   useEffect(() => {
