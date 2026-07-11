@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Info, ChevronLeft, AlertTriangle, Lock } from "lucide-react";
+import { Info, ChevronLeft, AlertTriangle } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -167,13 +167,10 @@ function EntryPage() {
               onValueChange={(v) => setActiveScope(v as Scope)}
               className="mt-8"
             >
-              <TabsList className="grid w-full grid-cols-4 bg-surface">
+              <TabsList className="grid w-full grid-cols-3 bg-surface">
                 <TabsTrigger value="scope_1">Scope 1</TabsTrigger>
                 <TabsTrigger value="scope_2">Scope 2</TabsTrigger>
                 <TabsTrigger value="scope_3">Scope 3</TabsTrigger>
-                <TabsTrigger value="waste" disabled>
-                  Waste & Water
-                </TabsTrigger>
               </TabsList>
 
               {(["scope_1", "scope_2", "scope_3"] as const).map((scope) => (
@@ -191,10 +188,6 @@ function EntryPage() {
                   />
                 </TabsContent>
               ))}
-
-              <TabsContent value="waste" className="mt-6">
-                <ComingSoon />
-              </TabsContent>
             </Tabs>
           </TooltipProvider>
         )}
@@ -203,19 +196,6 @@ function EntryPage() {
   );
 }
 
-function ComingSoon() {
-  return (
-    <div className="flex items-start gap-3 rounded-md border border-hairline bg-surface p-6">
-      <Lock className="mt-0.5 h-4 w-4 text-data-muted" />
-      <div>
-        <div className="text-sm font-medium text-foreground">Waste & Water</div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Coming soon — Emission factors pending verification.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function ScopePanel({
   scope,
@@ -495,24 +475,51 @@ function ScopePanel({
         </div>
       </div>
 
-      {selectedFactor && (
-        <div className="mt-6 rounded-md border border-hairline bg-background/40 p-4 text-xs text-muted-foreground">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              Factor:{" "}
-              <span className="tabular text-foreground">
-                {selectedFactor.co2e_factor}
-              </span>{" "}
-              kg CO₂e / {selectedFactor.unit}
-            </div>
-            {selectedFactor.source && (
-              <div className="text-right text-[11px] text-data-muted">
-                {selectedFactor.source}
+      {selectedFactor && (() => {
+        const qtyNum = Number(quantity);
+        const hasQty = Number.isFinite(qtyNum) && qtyNum > 0;
+        let converted = qtyNum;
+        const fUnit = selectedFactor.unit.toLowerCase();
+        const uUnit = unit.toLowerCase();
+        if (fUnit === "mwh" && uUnit === "kwh") converted = qtyNum / 1000;
+        else if (fUnit === "kwh" && uUnit === "mwh") converted = qtyNum * 1000;
+        const co2eKg = hasQty ? converted * selectedFactor.co2e_factor : 0;
+        const tCo2e = co2eKg / 1000;
+        return (
+          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-hairline bg-background/40 p-4 text-xs text-muted-foreground">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-data-muted">Emission factor</div>
+              <div className="mt-2">
+                <span className="tabular text-foreground">{selectedFactor.co2e_factor}</span>{" "}
+                kg CO₂e / {selectedFactor.unit}
               </div>
-            )}
+              {selectedFactor.source && (
+                <div className="mt-2 text-[11px] text-data-muted">{selectedFactor.source}</div>
+              )}
+            </div>
+            <div className="rounded-md border border-primary/30 bg-primary/[0.06] p-4">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-data-muted">Live estimate</div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-semibold tabular tracking-tight text-foreground">
+                  {tCo2e.toFixed(3)}
+                </span>
+                <span className="text-sm text-muted-foreground">t CO₂e</span>
+              </div>
+              <div className="mt-1 text-[11px] text-data-muted tabular">
+                {hasQty ? (
+                  <>
+                    {converted.toLocaleString(undefined, { maximumFractionDigits: 6 })} {selectedFactor.unit} ×{" "}
+                    {selectedFactor.co2e_factor} = {co2eKg.toFixed(3)} kg CO₂e
+                  </>
+                ) : (
+                  <>Enter a quantity to preview the footprint.</>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       <div className="mt-6 flex items-center justify-between border-t border-hairline pt-5">
         <p className="max-w-md text-[11px] text-muted-foreground">
