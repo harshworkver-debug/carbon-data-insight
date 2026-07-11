@@ -167,13 +167,10 @@ function EntryPage() {
               onValueChange={(v) => setActiveScope(v as Scope)}
               className="mt-8"
             >
-              <TabsList className="grid w-full grid-cols-4 bg-surface">
+              <TabsList className="grid w-full grid-cols-3 bg-surface">
                 <TabsTrigger value="scope_1">Scope 1</TabsTrigger>
                 <TabsTrigger value="scope_2">Scope 2</TabsTrigger>
                 <TabsTrigger value="scope_3">Scope 3</TabsTrigger>
-                <TabsTrigger value="waste" disabled>
-                  Waste & Water
-                </TabsTrigger>
               </TabsList>
 
               {(["scope_1", "scope_2", "scope_3"] as const).map((scope) => (
@@ -191,10 +188,6 @@ function EntryPage() {
                   />
                 </TabsContent>
               ))}
-
-              <TabsContent value="waste" className="mt-6">
-                <ComingSoon />
-              </TabsContent>
             </Tabs>
           </TooltipProvider>
         )}
@@ -203,19 +196,6 @@ function EntryPage() {
   );
 }
 
-function ComingSoon() {
-  return (
-    <div className="flex items-start gap-3 rounded-md border border-hairline bg-surface p-6">
-      <Lock className="mt-0.5 h-4 w-4 text-data-muted" />
-      <div>
-        <div className="text-sm font-medium text-foreground">Waste & Water</div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Coming soon — Emission factors pending verification.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function ScopePanel({
   scope,
