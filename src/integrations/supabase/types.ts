@@ -260,7 +260,12 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role:
+        | "admin"
+        | "user"
+        | "global_admin"
+        | "regional_director"
+        | "plant_manager"
       ghg_scope: "scope_1" | "scope_2" | "scope_3"
     }
     CompositeTypes: {
@@ -389,7 +394,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: [
+        "admin",
+        "user",
+        "global_admin",
+        "regional_director",
+        "plant_manager",
+      ],
       ghg_scope: ["scope_1", "scope_2", "scope_3"],
     },
   },
