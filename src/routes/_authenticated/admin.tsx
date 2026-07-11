@@ -148,10 +148,29 @@ function AdminConsole({ userId: _userId }: { userId: string }) {
           />
           <ProvisionForm />
         </section>
+
+        <section>
+          <SectionHeader
+            eyebrow="Hierarchy"
+            title="Facilities & Regional Assignments"
+            description="Provision physical facilities and bind them to regional directors or plant managers."
+          />
+          <FacilitiesConsole />
+        </section>
+
+        <section>
+          <SectionHeader
+            eyebrow="Integration"
+            title="ERP API Keys"
+            description="Generate tokens for automated ingestion at POST /api/v1/entries/bulk. Tokens are shown once — copy them immediately."
+          />
+          <ApiKeysConsole />
+        </section>
       </main>
     </div>
   );
 }
+
 
 function SectionHeader({
   eyebrow,
