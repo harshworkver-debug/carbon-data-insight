@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronLeft, ShieldAlert, Plus, Save, Trash2, ExternalLink } from "lucide-react";
+import { ChevronLeft, ShieldAlert, Plus, Save, Trash2, ExternalLink, Copy, KeyRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -148,10 +148,29 @@ function AdminConsole({ userId: _userId }: { userId: string }) {
           />
           <ProvisionForm />
         </section>
+
+        <section>
+          <SectionHeader
+            eyebrow="Hierarchy"
+            title="Facilities & Regional Assignments"
+            description="Provision physical facilities and bind them to regional directors or plant managers."
+          />
+          <FacilitiesConsole />
+        </section>
+
+        <section>
+          <SectionHeader
+            eyebrow="Integration"
+            title="ERP API Keys"
+            description="Generate tokens for automated ingestion at POST /api/v1/entries/bulk. Tokens are shown once — copy them immediately."
+          />
+          <ApiKeysConsole />
+        </section>
       </main>
     </div>
   );
 }
+
 
 function SectionHeader({
   eyebrow,
@@ -587,6 +606,370 @@ function FieldLabel({
       </span>
       {children}
     </label>
+  );
+}
+
+
+// ---------------------------------------------------------------- Facilities
+type CompanyRow = { id: string; name: string };
+type FacilityRow = { id: string; name: string; region: string; company_id: string; created_at: string };
+type ProfileRow = { id: string; full_name: string | null; company_id: string | null; assigned_region: string | null; assigned_facility_id: string | null };
+
+function FacilitiesConsole() {
+  const qc = useQueryClient();
+  const companiesQ = useQuery({
+    queryKey: ["admin_companies_simple"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("companies").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as CompanyRow[];
+    },
+  });
+  const facilitiesQ = useQuery({
+    queryKey: ["admin_facilities"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("facilities")
+        .select("id, name, region, company_id, created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as FacilityRow[];
+    },
+  });
+  const profilesQ = useQuery({
+    queryKey: ["admin_profiles"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, company_id, assigned_region, assigned_facility_id");
+      if (error) throw error;
+      return (data ?? []) as ProfileRow[];
+    },
+  });
+
+  const [companyId, setCompanyId] = useState("");
+  const [fname, setFname] = useState("");
+  const [region, setRegion] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const companyName = (id: string) =>
+    (companiesQ.data ?? []).find((c) => c.id === id)?.name ?? "—";
+
+  async function createFacility(e: FormEvent) {
+    e.preventDefault();
+    if (!companyId) return toast.error("Pick a company.");
+    setBusy(true);
+    const { error } = await supabase.from("facilities").insert({
+      company_id: companyId,
+      name: fname,
+      region,
+    });
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Facility provisioned.");
+    setFname("");
+    setRegion("");
+    qc.invalidateQueries({ queryKey: ["admin_facilities"] });
+  }
+
+  async function deleteFacility(id: string) {
+    if (!confirm("Delete this facility? Entries linked to it will remain but lose their facility reference.")) return;
+    const { error } = await supabase.from("facilities").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Facility removed.");
+    qc.invalidateQueries({ queryKey: ["admin_facilities"] });
+  }
+
+  async function assignDirector(profileId: string, patch: Partial<ProfileRow>) {
+    const { error } = await supabase.from("profiles").update(patch).eq("id", profileId);
+    if (error) return toast.error(error.message);
+    toast.success("Assignment updated.");
+    qc.invalidateQueries({ queryKey: ["admin_profiles"] });
+  }
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={createFacility} className="rounded-md border border-hairline bg-surface p-4">
+        <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-data-muted">
+          <Plus className="h-3.5 w-3.5" /> Provision new facility
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <Select value={companyId} onValueChange={setCompanyId}>
+            <SelectTrigger><SelectValue placeholder="Company" /></SelectTrigger>
+            <SelectContent>
+              {(companiesQ.data ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input required placeholder="Facility name (e.g. Baddi Plant #2)" value={fname} onChange={(e) => setFname(e.target.value)} />
+          <Input required placeholder="Region (e.g. North India)" value={region} onChange={(e) => setRegion(e.target.value)} />
+          <Button type="submit" disabled={busy} className="gap-1">
+            <Plus className="h-3.5 w-3.5" /> {busy ? "Adding…" : "Add facility"}
+          </Button>
+        </div>
+      </form>
+
+      <div className="overflow-x-auto rounded-md border border-hairline bg-surface">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
+              <th className="px-3 py-2 font-medium">Facility</th>
+              <th className="px-3 py-2 font-medium">Region</th>
+              <th className="px-3 py-2 font-medium">Company</th>
+              <th className="px-3 py-2 font-medium">Created</th>
+              <th className="px-3 py-2 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(facilitiesQ.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  {facilitiesQ.isLoading ? "Loading facilities…" : "No facilities provisioned."}
+                </td>
+              </tr>
+            )}
+            {(facilitiesQ.data ?? []).map((f) => (
+              <tr key={f.id} className="border-b border-hairline last:border-b-0 hover:bg-surface-elevated/60">
+                <td className="px-3 py-2 font-medium text-foreground">{f.name}</td>
+                <td className="px-3 py-2 text-muted-foreground">{f.region}</td>
+                <td className="px-3 py-2 text-muted-foreground">{companyName(f.company_id)}</td>
+                <td className="px-3 py-2 tabular text-muted-foreground">{f.created_at.slice(0, 10)}</td>
+                <td className="px-3 py-2 text-right">
+                  <Button size="sm" variant="ghost" onClick={() => deleteFacility(f.id)} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Director / Plant Manager assignments */}
+      <div className="rounded-md border border-hairline bg-surface">
+        <div className="border-b border-hairline px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-data-muted">
+          User Assignments
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
+              <th className="px-3 py-2 font-medium">User</th>
+              <th className="px-3 py-2 font-medium">Company</th>
+              <th className="px-3 py-2 font-medium">Assigned Region</th>
+              <th className="px-3 py-2 font-medium">Assigned Facility</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(profilesQ.data ?? []).map((p) => {
+              const facilitiesForCompany = (facilitiesQ.data ?? []).filter((f) => f.company_id === p.company_id);
+              const regions = Array.from(new Set(facilitiesForCompany.map((f) => f.region)));
+              return (
+                <tr key={p.id} className="border-b border-hairline last:border-b-0">
+                  <td className="px-3 py-2 text-foreground">{p.full_name ?? p.id.slice(0, 8)}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{p.company_id ? companyName(p.company_id) : "—"}</td>
+                  <td className="px-3 py-2 min-w-[180px]">
+                    <Select
+                      value={p.assigned_region ?? "__none"}
+                      onValueChange={(v) => assignDirector(p.id, { assigned_region: v === "__none" ? null : v })}
+                    >
+                      <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">— none —</SelectItem>
+                        {regions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-3 py-2 min-w-[220px]">
+                    <Select
+                      value={p.assigned_facility_id ?? "__none"}
+                      onValueChange={(v) => assignDirector(p.id, { assigned_facility_id: v === "__none" ? null : v })}
+                    >
+                      <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">— none —</SelectItem>
+                        {facilitiesForCompany.map((f) => (
+                          <SelectItem key={f.id} value={f.id}>{f.name} · {f.region}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- API keys
+type ApiKeyRow = {
+  id: string;
+  name: string;
+  company_id: string;
+  created_at: string;
+  last_used_at: string | null;
+};
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateRawKey(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `cc_live_${hex}`;
+}
+
+function ApiKeysConsole() {
+  const qc = useQueryClient();
+  const companiesQ = useQuery({
+    queryKey: ["admin_companies_simple"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("companies").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as CompanyRow[];
+    },
+  });
+  const keysQ = useQuery({
+    queryKey: ["admin_api_keys"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("api_keys")
+        .select("id, name, company_id, created_at, last_used_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ApiKeyRow[];
+    },
+  });
+
+  const [companyId, setCompanyId] = useState("");
+  const [name, setName] = useState("");
+  const [revealed, setRevealed] = useState<{ id: string; token: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const companyName = (id: string) => (companiesQ.data ?? []).find((c) => c.id === id)?.name ?? "—";
+
+  async function generate(e: FormEvent) {
+    e.preventDefault();
+    if (!companyId) return toast.error("Pick a company.");
+    setBusy(true);
+    const raw = generateRawKey();
+    const hashed = await sha256Hex(raw);
+    const { data: user } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("api_keys")
+      .insert({
+        company_id: companyId,
+        name,
+        hashed_key: hashed,
+        created_by: user.user?.id ?? null,
+      })
+      .select("id")
+      .single();
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    setRevealed({ id: data.id, token: raw });
+    setName("");
+    qc.invalidateQueries({ queryKey: ["admin_api_keys"] });
+  }
+
+  async function revoke(id: string) {
+    if (!confirm("Revoke this API key? Any ERP integration using it will stop working immediately.")) return;
+    const { error } = await supabase.from("api_keys").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Key revoked.");
+    qc.invalidateQueries({ queryKey: ["admin_api_keys"] });
+  }
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={generate} className="rounded-md border border-hairline bg-surface p-4">
+        <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-data-muted">
+          <KeyRound className="h-3.5 w-3.5" /> Generate integration token
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Select value={companyId} onValueChange={setCompanyId}>
+            <SelectTrigger><SelectValue placeholder="Company" /></SelectTrigger>
+            <SelectContent>
+              {(companiesQ.data ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input required placeholder="Label (e.g. SAP ERP Integration)" value={name} onChange={(e) => setName(e.target.value)} />
+          <Button type="submit" disabled={busy} className="gap-1">
+            <KeyRound className="h-3.5 w-3.5" /> {busy ? "Minting…" : "Generate token"}
+          </Button>
+        </div>
+      </form>
+
+      {revealed && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-amber-300">Shown once — copy now</div>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="tabular block flex-1 overflow-x-auto rounded bg-background/60 px-3 py-2 text-xs text-foreground">
+              {revealed.token}
+            </code>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1 border-hairline"
+              onClick={() => {
+                navigator.clipboard.writeText(revealed.token);
+                toast.success("Copied to clipboard.");
+              }}
+            >
+              <Copy className="h-3 w-3" /> Copy
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setRevealed(null)}>Dismiss</Button>
+          </div>
+          <div className="mt-2 text-xs text-amber-200/80">
+            Use as <code className="rounded bg-background/40 px-1 py-0.5">Authorization: Bearer &lt;token&gt;</code> against <code className="rounded bg-background/40 px-1 py-0.5">POST /api/v1/entries/bulk</code>.
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-md border border-hairline bg-surface">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
+              <th className="px-3 py-2 font-medium">Label</th>
+              <th className="px-3 py-2 font-medium">Company</th>
+              <th className="px-3 py-2 font-medium">Created</th>
+              <th className="px-3 py-2 font-medium">Last Used</th>
+              <th className="px-3 py-2 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(keysQ.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  {keysQ.isLoading ? "Loading keys…" : "No API keys minted yet."}
+                </td>
+              </tr>
+            )}
+            {(keysQ.data ?? []).map((k) => (
+              <tr key={k.id} className="border-b border-hairline last:border-b-0">
+                <td className="px-3 py-2 text-foreground">{k.name}</td>
+                <td className="px-3 py-2 text-muted-foreground">{companyName(k.company_id)}</td>
+                <td className="px-3 py-2 tabular text-muted-foreground">{k.created_at.slice(0, 10)}</td>
+                <td className="px-3 py-2 tabular text-muted-foreground">{k.last_used_at ? k.last_used_at.slice(0, 10) : "—"}</td>
+                <td className="px-3 py-2 text-right">
+                  <Button size="sm" variant="ghost" onClick={() => revoke(k.id)} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

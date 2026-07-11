@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedDashboardEntryRouteImport } from './routes/_authenticated/dashboard.entry'
+import { Route as ApiV1EntriesBulkRouteImport } from './routes/api/v1/entries/bulk'
 import { Route as AuthenticatedAdminCompanyIdRouteImport } from './routes/_authenticated/admin.company.$id'
 
 const AuthRoute = AuthRouteImport.update({
@@ -47,6 +48,11 @@ const AuthenticatedDashboardEntryRoute =
     path: '/entry',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const ApiV1EntriesBulkRoute = ApiV1EntriesBulkRouteImport.update({
+  id: '/api/v1/entries/bulk',
+  path: '/api/v1/entries/bulk',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAdminCompanyIdRoute =
   AuthenticatedAdminCompanyIdRouteImport.update({
     id: '/company/$id',
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/dashboard/entry': typeof AuthenticatedDashboardEntryRoute
   '/admin/company/$id': typeof AuthenticatedAdminCompanyIdRoute
+  '/api/v1/entries/bulk': typeof ApiV1EntriesBulkRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/dashboard/entry': typeof AuthenticatedDashboardEntryRoute
   '/admin/company/$id': typeof AuthenticatedAdminCompanyIdRoute
+  '/api/v1/entries/bulk': typeof ApiV1EntriesBulkRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/_authenticated/dashboard/entry': typeof AuthenticatedDashboardEntryRoute
   '/_authenticated/admin/company/$id': typeof AuthenticatedAdminCompanyIdRoute
+  '/api/v1/entries/bulk': typeof ApiV1EntriesBulkRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/entry'
     | '/admin/company/$id'
+    | '/api/v1/entries/bulk'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/entry'
     | '/admin/company/$id'
+    | '/api/v1/entries/bulk'
   id:
     | '__root__'
     | '/'
@@ -106,12 +117,14 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/dashboard/entry'
     | '/_authenticated/admin/company/$id'
+    | '/api/v1/entries/bulk'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiV1EntriesBulkRoute: typeof ApiV1EntriesBulkRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -157,6 +170,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/entry'
       preLoaderRoute: typeof AuthenticatedDashboardEntryRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/api/v1/entries/bulk': {
+      id: '/api/v1/entries/bulk'
+      path: '/api/v1/entries/bulk'
+      fullPath: '/api/v1/entries/bulk'
+      preLoaderRoute: typeof ApiV1EntriesBulkRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin/company/$id': {
       id: '/_authenticated/admin/company/$id'
@@ -210,6 +230,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiV1EntriesBulkRoute: ApiV1EntriesBulkRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

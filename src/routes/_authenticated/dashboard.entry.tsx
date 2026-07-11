@@ -197,6 +197,8 @@ function EntryPage() {
 }
 
 
+type FacilityOpt = { id: string; name: string; region: string };
+
 function ScopePanel({
   scope,
   companyId,
@@ -220,8 +222,23 @@ function ScopePanel({
     new Date().toISOString().slice(0, 10),
   );
   const [notes, setNotes] = useState<string>("");
+  const [facilityId, setFacilityId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [quantityError, setQuantityError] = useState<string | null>(null);
+
+  const facilitiesQ = useQuery({
+    queryKey: ["entry_facilities", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("facilities")
+        .select("id, name, region")
+        .eq("company_id", companyId)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as FacilityOpt[];
+    },
+  });
+
 
   // Reset dependent fields when scope changes
   useEffect(() => {
@@ -284,9 +301,14 @@ function ScopePanel({
       setQuantityError(qErr);
       return;
     }
+    if (!facilityId) {
+      toast.error("Select a facility for this entry.");
+      return;
+    }
     setSubmitting(true);
     const { error } = await supabase.from("ghg_entries").insert({
       company_id: companyId,
+      facility_id: facilityId,
       entered_by: userId,
       scope,
       category: selectedFactor.category,
@@ -315,7 +337,28 @@ function ScopePanel({
         <p className="mt-1 text-xs text-muted-foreground">{SCOPE_META[scope].description}</p>
       </div>
 
+      <div className="mb-5">
+        <Field label="Facility" htmlFor={`${scope}-facility`}>
+          <Select value={facilityId} onValueChange={setFacilityId} disabled={facilitiesQ.isLoading}>
+            <SelectTrigger id={`${scope}-facility`}>
+              <SelectValue placeholder={facilitiesQ.isLoading ? "Loading facilities…" : "Select facility"} />
+            </SelectTrigger>
+            <SelectContent>
+              {(facilitiesQ.data ?? []).map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.name} · {f.region}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        {(facilitiesQ.data ?? []).length === 0 && !facilitiesQ.isLoading && (
+          <p className="mt-2 text-xs text-amber-300">
+            No facilities provisioned yet — a global admin must add one under /admin before entries can be recorded.
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
         <Field label="Category" htmlFor={`${scope}-category`}>
           <Select
             value={category}
