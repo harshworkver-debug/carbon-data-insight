@@ -12,11 +12,13 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { AlertTriangle, Printer } from "lucide-react";
+import { AlertTriangle, ChevronDown, Filter, Printer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type RangeKey = "month" | "quarter" | "fy" | "custom";
 
