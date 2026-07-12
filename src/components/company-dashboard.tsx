@@ -365,6 +365,18 @@ export function CompanyDashboard({
         </div>
       </div>
 
+      {/* Facility / Region filter bar */}
+      <FilterBar
+        access={access}
+        facilities={facilities}
+        selectedRegions={selectedRegions}
+        setSelectedRegions={setSelectedRegions}
+        selectedFacilities={selectedFacilities}
+        setSelectedFacilities={setSelectedFacilities}
+        effectiveRegions={effectiveRegions}
+        effectiveFacilities={effectiveFacilities}
+      />
+
       {/* KPI cards */}
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Kpi
