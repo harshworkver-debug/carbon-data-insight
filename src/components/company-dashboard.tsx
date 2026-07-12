@@ -108,6 +108,54 @@ export function CompanyDashboard({
   });
   const range = getRange(rangeKey, custom);
 
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedFacilities, setSelectedFacilities] = useState<string[]>([]);
+
+  const facilitiesQ = useQuery({
+    queryKey: ["facilities_for_dashboard", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("facilities")
+        .select("id, name, region")
+        .eq("company_id", companyId)
+        .order("region")
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Facility[];
+    },
+  });
+
+  const accessQ = useQuery({
+    queryKey: ["dashboard_access_scope"],
+    queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (!uid) return { mode: "none" as FilterMode, region: null as string | null, facilityId: null as string | null };
+      const [{ data: roles }, { data: profile }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", uid),
+        supabase
+          .from("profiles")
+          .select("assigned_region, assigned_facility_id")
+          .eq("id", uid)
+          .maybeSingle(),
+      ]);
+      const roleSet = new Set((roles ?? []).map((r) => r.role));
+      const isGlobal =
+        auditor || roleSet.has("admin") || roleSet.has("global_admin");
+      let mode: FilterMode = "global";
+      if (!isGlobal) {
+        if (roleSet.has("plant_manager")) mode = "plant";
+        else if (roleSet.has("regional_director")) mode = "regional";
+        else mode = "global";
+      }
+      return {
+        mode,
+        region: profile?.assigned_region ?? null,
+        facilityId: profile?.assigned_facility_id ?? null,
+      };
+    },
+  });
+
   const factorsQ = useQuery({
     queryKey: ["emission_factors_all"],
     queryFn: async () => {
@@ -124,7 +172,7 @@ export function CompanyDashboard({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ghg_entries")
-        .select("id, entry_date, reporting_period, scope, sub_type, category, quantity, unit")
+        .select("id, entry_date, reporting_period, scope, sub_type, category, quantity, unit, facility_id")
         .eq("company_id", companyId)
         .gte("entry_date", range.from)
         .lte("entry_date", range.to)
