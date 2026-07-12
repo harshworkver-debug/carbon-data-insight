@@ -12,11 +12,13 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { AlertTriangle, Printer } from "lucide-react";
+import { AlertTriangle, ChevronDown, Filter, Printer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type RangeKey = "month" | "quarter" | "fy" | "custom";
 
@@ -29,7 +31,10 @@ type Entry = {
   category: string;
   quantity: number;
   unit: string;
+  facility_id: string | null;
 };
+type Facility = { id: string; name: string; region: string };
+type FilterMode = "global" | "regional" | "plant" | "none";
 type Calc = {
   entry_id: string;
   co2e_kg: number;
@@ -103,6 +108,54 @@ export function CompanyDashboard({
   });
   const range = getRange(rangeKey, custom);
 
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedFacilities, setSelectedFacilities] = useState<string[]>([]);
+
+  const facilitiesQ = useQuery({
+    queryKey: ["facilities_for_dashboard", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("facilities")
+        .select("id, name, region")
+        .eq("company_id", companyId)
+        .order("region")
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Facility[];
+    },
+  });
+
+  const accessQ = useQuery({
+    queryKey: ["dashboard_access_scope"],
+    queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (!uid) return { mode: "none" as FilterMode, region: null as string | null, facilityId: null as string | null };
+      const [{ data: roles }, { data: profile }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", uid),
+        supabase
+          .from("profiles")
+          .select("assigned_region, assigned_facility_id")
+          .eq("id", uid)
+          .maybeSingle(),
+      ]);
+      const roleSet = new Set((roles ?? []).map((r) => r.role));
+      const isGlobal =
+        auditor || roleSet.has("admin") || roleSet.has("global_admin");
+      let mode: FilterMode = "global";
+      if (!isGlobal) {
+        if (roleSet.has("plant_manager")) mode = "plant";
+        else if (roleSet.has("regional_director")) mode = "regional";
+        else mode = "global";
+      }
+      return {
+        mode,
+        region: profile?.assigned_region ?? null,
+        facilityId: profile?.assigned_facility_id ?? null,
+      };
+    },
+  });
+
   const factorsQ = useQuery({
     queryKey: ["emission_factors_all"],
     queryFn: async () => {
@@ -119,7 +172,7 @@ export function CompanyDashboard({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ghg_entries")
-        .select("id, entry_date, reporting_period, scope, sub_type, category, quantity, unit")
+        .select("id, entry_date, reporting_period, scope, sub_type, category, quantity, unit, facility_id")
         .eq("company_id", companyId)
         .gte("entry_date", range.from)
         .lte("entry_date", range.to)
@@ -153,7 +206,41 @@ export function CompanyDashboard({
     return m;
   }, [calcQ.data]);
 
-  const entries = entriesQ.data ?? [];
+  const allEntries = entriesQ.data ?? [];
+  const facilities = facilitiesQ.data ?? [];
+  const access = accessQ.data;
+
+  // Derive effective filter selections based on role.
+  const effectiveRegions = useMemo(() => {
+    if (!access) return selectedRegions;
+    if (access.mode === "regional" && access.region) return [access.region];
+    if (access.mode === "plant") return [];
+    return selectedRegions;
+  }, [access, selectedRegions]);
+
+  const effectiveFacilities = useMemo(() => {
+    if (!access) return selectedFacilities;
+    if (access.mode === "plant" && access.facilityId) return [access.facilityId];
+    return selectedFacilities;
+  }, [access, selectedFacilities]);
+
+  const facilityIdToRegion = useMemo(() => {
+    const m = new Map<string, string>();
+    facilities.forEach((f) => m.set(f.id, f.region));
+    return m;
+  }, [facilities]);
+
+  const entries = useMemo(() => {
+    return allEntries.filter((e) => {
+      if (effectiveFacilities.length > 0) {
+        if (!e.facility_id || !effectiveFacilities.includes(e.facility_id)) return false;
+      } else if (effectiveRegions.length > 0) {
+        const r = e.facility_id ? facilityIdToRegion.get(e.facility_id) : null;
+        if (!r || !effectiveRegions.includes(r)) return false;
+      }
+      return true;
+    });
+  }, [allEntries, effectiveFacilities, effectiveRegions, facilityIdToRegion]);
 
   const rows = useMemo(
     () =>
@@ -277,6 +364,18 @@ export function CompanyDashboard({
           )}
         </div>
       </div>
+
+      {/* Facility / Region filter bar */}
+      <FilterBar
+        access={access}
+        facilities={facilities}
+        selectedRegions={selectedRegions}
+        setSelectedRegions={setSelectedRegions}
+        selectedFacilities={selectedFacilities}
+        setSelectedFacilities={setSelectedFacilities}
+        effectiveRegions={effectiveRegions}
+        effectiveFacilities={effectiveFacilities}
+      />
 
       {/* KPI cards */}
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -556,5 +655,198 @@ function EmptyChart({ loading }: { loading: boolean }) {
     <div className="grid h-[220px] place-items-center text-sm text-muted-foreground">
       {loading ? "Loading…" : "No data in this window."}
     </div>
+  );
+}
+
+type AccessScope = { mode: FilterMode; region: string | null; facilityId: string | null };
+
+function FilterBar({
+  access,
+  facilities,
+  selectedRegions,
+  setSelectedRegions,
+  selectedFacilities,
+  setSelectedFacilities,
+  effectiveRegions,
+  effectiveFacilities,
+}: {
+  access: AccessScope | undefined;
+  facilities: Facility[];
+  selectedRegions: string[];
+  setSelectedRegions: (v: string[]) => void;
+  selectedFacilities: string[];
+  setSelectedFacilities: (v: string[]) => void;
+  effectiveRegions: string[];
+  effectiveFacilities: string[];
+}) {
+  if (!access) return null;
+
+  // Plant manager: single locked badge.
+  if (access.mode === "plant") {
+    const f = facilities.find((x) => x.id === access.facilityId);
+    return (
+      <div className="no-print mt-4 flex items-center gap-2 rounded-md border border-hairline bg-surface px-4 py-2.5 text-xs">
+        <Filter className="h-3.5 w-3.5 text-data-muted" />
+        <span className="uppercase tracking-[0.14em] text-data-muted">Scope locked</span>
+        <span className="tabular text-foreground">
+          {f ? `${f.name} · ${f.region}` : "Assigned facility"}
+        </span>
+      </div>
+    );
+  }
+
+  const allRegions = Array.from(new Set(facilities.map((f) => f.region))).sort();
+
+  // Regional director: region pinned, facility multi-select limited to that region.
+  const regionLocked = access.mode === "regional";
+  const facilityPool = regionLocked
+    ? facilities.filter((f) => f.region === access.region)
+    : effectiveRegions.length > 0
+      ? facilities.filter((f) => effectiveRegions.includes(f.region))
+      : facilities;
+
+  // Prune stale facility selections when their region falls out of scope.
+  const validFacilityIds = new Set(facilityPool.map((f) => f.id));
+  const prunedFacilities = selectedFacilities.filter((id) => validFacilityIds.has(id));
+  if (prunedFacilities.length !== selectedFacilities.length) {
+    queueMicrotask(() => setSelectedFacilities(prunedFacilities));
+  }
+
+  return (
+    <div className="no-print mt-4 flex flex-wrap items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-2">
+      <div className="flex items-center gap-1.5 pr-1 text-[11px] uppercase tracking-[0.14em] text-data-muted">
+        <Filter className="h-3.5 w-3.5" />
+        Filters
+      </div>
+
+      {/* Region picker */}
+      {regionLocked ? (
+        <div className="flex h-8 items-center gap-1.5 rounded-md border border-hairline bg-surface-elevated px-2.5 text-xs text-muted-foreground">
+          <span className="uppercase tracking-[0.12em] text-data-muted">Region</span>
+          <span className="tabular text-foreground">{access.region ?? "—"}</span>
+          <span className="text-[10px] text-data-muted">(locked)</span>
+        </div>
+      ) : (
+        <MultiSelectPopover
+          label="Region"
+          options={allRegions.map((r) => ({ value: r, label: r }))}
+          selected={selectedRegions}
+          onChange={setSelectedRegions}
+          emptyLabel="All regions"
+        />
+      )}
+
+      {/* Facility picker */}
+      <MultiSelectPopover
+        label="Facility"
+        options={facilityPool.map((f) => ({
+          value: f.id,
+          label: f.name,
+          hint: f.region,
+        }))}
+        selected={selectedFacilities}
+        onChange={setSelectedFacilities}
+        emptyLabel={facilityPool.length === 0 ? "No facilities" : "All facilities"}
+        disabled={facilityPool.length === 0}
+      />
+
+      {(effectiveRegions.length > 0 || effectiveFacilities.length > 0) && !regionLocked && (
+        <button
+          onClick={() => {
+            setSelectedRegions([]);
+            setSelectedFacilities([]);
+          }}
+          className="ml-1 text-[11px] uppercase tracking-[0.12em] text-data-muted transition-colors hover:text-foreground"
+        >
+          Reset
+        </button>
+      )}
+
+      <div className="ml-auto text-[11px] tabular text-data-muted">
+        Showing:{" "}
+        {effectiveFacilities.length > 0
+          ? `${effectiveFacilities.length} facility${effectiveFacilities.length === 1 ? "" : "s"}`
+          : effectiveRegions.length > 0
+            ? `${effectiveRegions.length} region${effectiveRegions.length === 1 ? "" : "s"}`
+            : "Company-wide"}
+      </div>
+    </div>
+  );
+}
+
+function MultiSelectPopover({
+  label,
+  options,
+  selected,
+  onChange,
+  emptyLabel,
+  disabled,
+}: {
+  label: string;
+  options: { value: string; label: string; hint?: string }[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  emptyLabel: string;
+  disabled?: boolean;
+}) {
+  const first = options.find((o) => o.value === selected[0]);
+  const summary =
+    selected.length === 0
+      ? emptyLabel
+      : selected.length === 1
+        ? first?.label ?? "1 selected"
+        : `${first?.label ?? "Multiple"} (+${selected.length - 1} selected)`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          disabled={disabled}
+          className="flex h-8 items-center gap-2 rounded-md border border-hairline bg-surface-elevated px-2.5 text-xs text-foreground transition-colors hover:bg-surface-elevated/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="uppercase tracking-[0.12em] text-data-muted">{label}</span>
+          <span className="max-w-[180px] truncate tabular">{summary}</span>
+          <ChevronDown className="h-3 w-3 text-data-muted" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <div className="max-h-64 overflow-y-auto py-1">
+          {options.length === 0 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">No options available.</div>
+          )}
+          {options.map((o) => {
+            const checked = selected.includes(o.value);
+            return (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-surface-elevated"
+              >
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(v) => {
+                      if (v) onChange([...selected, o.value]);
+                      else onChange(selected.filter((s) => s !== o.value));
+                    }}
+                  />
+                  <span className="text-foreground">{o.label}</span>
+                </div>
+                {o.hint && <span className="text-[10px] tabular text-data-muted">{o.hint}</span>}
+              </label>
+            );
+          })}
+        </div>
+        {selected.length > 0 && (
+          <div className="border-t border-hairline px-3 py-2">
+            <button
+              onClick={() => onChange([])}
+              className="text-[11px] uppercase tracking-[0.12em] text-data-muted hover:text-foreground"
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
