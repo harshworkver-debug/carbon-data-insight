@@ -31,7 +31,10 @@ type Entry = {
   category: string;
   quantity: number;
   unit: string;
+  facility_id: string | null;
 };
+type Facility = { id: string; name: string; region: string };
+type FilterMode = "global" | "regional" | "plant" | "none";
 type Calc = {
   entry_id: string;
   co2e_kg: number;
