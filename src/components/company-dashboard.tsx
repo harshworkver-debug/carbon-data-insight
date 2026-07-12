@@ -206,7 +206,41 @@ export function CompanyDashboard({
     return m;
   }, [calcQ.data]);
 
-  const entries = entriesQ.data ?? [];
+  const allEntries = entriesQ.data ?? [];
+  const facilities = facilitiesQ.data ?? [];
+  const access = accessQ.data;
+
+  // Derive effective filter selections based on role.
+  const effectiveRegions = useMemo(() => {
+    if (!access) return selectedRegions;
+    if (access.mode === "regional" && access.region) return [access.region];
+    if (access.mode === "plant") return [];
+    return selectedRegions;
+  }, [access, selectedRegions]);
+
+  const effectiveFacilities = useMemo(() => {
+    if (!access) return selectedFacilities;
+    if (access.mode === "plant" && access.facilityId) return [access.facilityId];
+    return selectedFacilities;
+  }, [access, selectedFacilities]);
+
+  const facilityIdToRegion = useMemo(() => {
+    const m = new Map<string, string>();
+    facilities.forEach((f) => m.set(f.id, f.region));
+    return m;
+  }, [facilities]);
+
+  const entries = useMemo(() => {
+    return allEntries.filter((e) => {
+      if (effectiveFacilities.length > 0) {
+        if (!e.facility_id || !effectiveFacilities.includes(e.facility_id)) return false;
+      } else if (effectiveRegions.length > 0) {
+        const r = e.facility_id ? facilityIdToRegion.get(e.facility_id) : null;
+        if (!r || !effectiveRegions.includes(r)) return false;
+      }
+      return true;
+    });
+  }, [allEntries, effectiveFacilities, effectiveRegions, facilityIdToRegion]);
 
   const rows = useMemo(
     () =>
