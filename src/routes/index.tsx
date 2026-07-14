@@ -1,8 +1,48 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Carbon Control — Scope 1, 2 & 3 emissions ledger" },
+      {
+        name: "description",
+        content:
+          "Audit-grade Scope 1, 2, and 3 emissions accounting for Indian manufacturers with versioned factors and locked reporting periods.",
+      },
+      { property: "og:title", content: "Carbon Control — Scope 1, 2 & 3 emissions ledger" },
+      {
+        property: "og:description",
+        content:
+          "Audit-grade Scope 1, 2, and 3 emissions accounting for Indian manufacturers with versioned factors and locked reporting periods.",
+      },
+      { property: "og:url", content: "https://carbon-data-insight.lovable.app/" },
+    ],
+    links: [{ rel: "canonical", href: "https://carbon-data-insight.lovable.app/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              name: "Carbon Control",
+              url: "https://carbon-data-insight.lovable.app/",
+              logo: "https://carbon-data-insight.lovable.app/favicon.ico",
+            },
+            {
+              "@type": "WebSite",
+              name: "Carbon Control",
+              url: "https://carbon-data-insight.lovable.app/",
+            },
+          ],
+        }),
+      },
+    ],
+  }),
   component: Landing,
 });
+
 
 function Landing() {
   return (

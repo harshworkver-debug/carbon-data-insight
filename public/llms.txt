@@ -1,0 +1,10 @@
+# Carbon Control
+
+> Audit-grade Scope 1, 2, and 3 emissions data platform for Indian manufacturers and their supply chain.
+
+Carbon Control gives manufacturers versioned emission factors (CEA, IPCC, DEFRA), locked reporting periods, and full lineage from every entry to its factor of record.
+
+## Pages
+
+- [Home](/): Product overview, scopes covered, and factor sources.
+- [Sign in](/auth): Access or create a Carbon Control workspace.
