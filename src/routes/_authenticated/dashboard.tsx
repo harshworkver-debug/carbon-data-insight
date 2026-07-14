@@ -5,8 +5,20 @@ import { CompanyDashboard } from "@/components/company-dashboard";
 import { ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  head: () => ({
+    meta: [
+      { title: "Dashboard — Carbon Control" },
+      {
+        name: "description",
+        content:
+          "Analytical dashboard for Scope 1, 2, and 3 emissions across your facilities, regions, and reporting periods.",
+      },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: Dashboard,
 });
+
 
 type Profile = {
   full_name: string | null;
