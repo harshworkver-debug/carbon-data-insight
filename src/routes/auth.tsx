@@ -12,11 +12,24 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in — Carbon Control" },
-      { name: "description", content: "Access your Carbon Control workspace." },
+      {
+        name: "description",
+        content:
+          "Sign in or create your Carbon Control workspace to manage Scope 1, 2, and 3 emissions data for your manufacturing operations.",
+      },
+      { property: "og:title", content: "Sign in — Carbon Control" },
+      {
+        property: "og:description",
+        content:
+          "Access your Carbon Control workspace to manage Scope 1, 2, and 3 emissions data for your manufacturing operations.",
+      },
+      { property: "og:url", content: "https://carbon-data-insight.lovable.app/auth" },
     ],
+    links: [{ rel: "canonical", href: "https://carbon-data-insight.lovable.app/auth" }],
   }),
   component: AuthPage,
 });
+
 
 function AuthPage() {
   const search = Route.useSearch();
