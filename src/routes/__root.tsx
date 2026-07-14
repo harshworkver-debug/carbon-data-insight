@@ -81,24 +81,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Carbon Control — Precise emissions data for India's manufacturing supply chain" },
+      { title: "Carbon Control — Emissions data for Indian manufacturing" },
       {
         name: "description",
         content:
           "Carbon Control gives Indian manufacturers audit-grade Scope 1, 2, and 3 emissions data across their supply chain.",
       },
-      { property: "og:title", content: "Carbon Control — Precise emissions data for India's manufacturing supply chain" },
-      {
-        property: "og:description",
-        content: "Carbon Control gives Indian manufacturers audit-grade Scope 1, 2, and 3 emissions data across their supply chain.",
-      },
       { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Carbon Control" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Carbon Control — Precise emissions data for India's manufacturing supply chain" },
-      { name: "twitter:description", content: "Carbon Control gives Indian manufacturers audit-grade Scope 1, 2, and 3 emissions data across their supply chain." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0f9c8f59-f41e-4ef4-bd1d-f3f954a46c01/id-preview-598d37d0--a3d619c3-e77c-4d78-91ac-1269e7bcf9a9.lovable.app-1783836184764.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0f9c8f59-f41e-4ef4-bd1d-f3f954a46c01/id-preview-598d37d0--a3d619c3-e77c-4d78-91ac-1269e7bcf9a9.lovable.app-1783836184764.png" },
     ],
+
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
