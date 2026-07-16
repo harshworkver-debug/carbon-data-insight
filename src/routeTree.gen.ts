@@ -15,8 +15,6 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
-import { Route as AuthenticatedDashboardEntryRouteImport } from './routes/_authenticated/dashboard.entry'
-import { Route as ApiV1EntriesBulkRouteImport } from './routes/api/v1/entries/bulk'
 import { Route as AuthenticatedAdminCompanyIdRouteImport } from './routes/_authenticated/admin.company.$id'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -48,17 +46,6 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedDashboardEntryRoute =
-  AuthenticatedDashboardEntryRouteImport.update({
-    id: '/entry',
-    path: '/entry',
-    getParentRoute: () => AuthenticatedDashboardRoute,
-  } as any)
-const ApiV1EntriesBulkRoute = ApiV1EntriesBulkRouteImport.update({
-  id: '/api/v1/entries/bulk',
-  path: '/api/v1/entries/bulk',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedAdminCompanyIdRoute =
   AuthenticatedAdminCompanyIdRouteImport.update({
     id: '/company/$id',
@@ -71,20 +58,16 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
-  '/dashboard/entry': typeof AuthenticatedDashboardEntryRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/admin/company/$id': typeof AuthenticatedAdminCompanyIdRoute
-  '/api/v1/entries/bulk': typeof ApiV1EntriesBulkRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
-  '/dashboard/entry': typeof AuthenticatedDashboardEntryRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/admin/company/$id': typeof AuthenticatedAdminCompanyIdRoute
-  '/api/v1/entries/bulk': typeof ApiV1EntriesBulkRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -93,10 +76,8 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
-  '/_authenticated/dashboard/entry': typeof AuthenticatedDashboardEntryRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/admin/company/$id': typeof AuthenticatedAdminCompanyIdRoute
-  '/api/v1/entries/bulk': typeof ApiV1EntriesBulkRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -106,9 +87,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/admin'
     | '/dashboard'
-    | '/dashboard/entry'
     | '/admin/company/$id'
-    | '/api/v1/entries/bulk'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -116,9 +95,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/admin'
     | '/dashboard'
-    | '/dashboard/entry'
     | '/admin/company/$id'
-    | '/api/v1/entries/bulk'
   id:
     | '__root__'
     | '/'
@@ -127,9 +104,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/admin'
     | '/_authenticated/dashboard'
-    | '/_authenticated/dashboard/entry'
     | '/_authenticated/admin/company/$id'
-    | '/api/v1/entries/bulk'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -137,7 +112,6 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
-  ApiV1EntriesBulkRoute: typeof ApiV1EntriesBulkRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -184,20 +158,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/dashboard/entry': {
-      id: '/_authenticated/dashboard/entry'
-      path: '/entry'
-      fullPath: '/dashboard/entry'
-      preLoaderRoute: typeof AuthenticatedDashboardEntryRouteImport
-      parentRoute: typeof AuthenticatedDashboardRoute
-    }
-    '/api/v1/entries/bulk': {
-      id: '/api/v1/entries/bulk'
-      path: '/api/v1/entries/bulk'
-      fullPath: '/api/v1/entries/bulk'
-      preLoaderRoute: typeof ApiV1EntriesBulkRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated/admin/company/$id': {
       id: '/_authenticated/admin/company/$id'
       path: '/company/$id'
@@ -219,28 +179,14 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
 const AuthenticatedAdminRouteWithChildren =
   AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
 
-interface AuthenticatedDashboardRouteChildren {
-  AuthenticatedDashboardEntryRoute: typeof AuthenticatedDashboardEntryRoute
-}
-
-const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
-  {
-    AuthenticatedDashboardEntryRoute: AuthenticatedDashboardEntryRoute,
-  }
-
-const AuthenticatedDashboardRouteWithChildren =
-  AuthenticatedDashboardRoute._addFileChildren(
-    AuthenticatedDashboardRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRouteWithChildren
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRouteWithChildren,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -251,18 +197,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
-  ApiV1EntriesBulkRoute: ApiV1EntriesBulkRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

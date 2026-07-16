@@ -1,975 +1,316 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { ChevronLeft, ShieldAlert, Plus, Save, Trash2, ExternalLink, Copy, KeyRound } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { Database } from "@/integrations/supabase/types";
+import { ChevronRight, ShieldAlert } from "lucide-react";
 
-type Scope = Database["public"]["Enums"]["ghg_scope"];
+export const Route = createFileRoute("/_authenticated/admin")({
+  head: () => ({
+    meta: [
+      { title: "Admin — Carbon Clarity" },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
+  component: AdminHome,
+});
 
-type Factor = {
-  id: string;
-  scope: Scope;
-  category: string;
-  sub_type: string | null;
-  unit: string;
-  co2e_factor: number;
-  is_proxy_data: boolean;
-  source: string | null;
-  version_year: string | null;
-};
-
-type Company = {
+type CompanyRow = {
   id: string;
   name: string;
+  contact_email: string | null;
   location: string | null;
   industry_type: string | null;
   created_at: string;
+  total_kg: number;
+  last_entry: string | null;
 };
 
-export const Route = createFileRoute("/_authenticated/admin")({
-  component: AdminPage,
-});
-
-function AdminPage() {
-  const [checked, setChecked] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+function AdminHome() {
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<"loading" | "denied" | "ok">("loading");
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        setChecked(true);
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setStatus("denied");
         return;
       }
-      setUserId(data.user.id);
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", data.user.id);
-      setIsAdmin((roles ?? []).some((r) => r.role === "admin"));
-      setChecked(true);
-    })();
-  }, []);
+        .eq("user_id", userData.user.id);
+      if (!(roles ?? []).some((r) => r.role === "admin")) {
+        setStatus("denied");
+        return;
+      }
 
-  if (!checked) {
+      const [{ data: comps }, { data: calcs }, { data: entries }] = await Promise.all([
+        supabase.from("companies").select("*").order("name"),
+        supabase.from("calculated_emissions").select("company_id, co2e_kg"),
+        supabase
+          .from("ghg_entries")
+          .select("company_id, entry_date")
+          .order("entry_date", { ascending: false }),
+      ]);
+
+      const totals = new Map<string, number>();
+      (calcs ?? []).forEach((r) => {
+        const v = Number(r.co2e_kg ?? 0);
+        totals.set(r.company_id, (totals.get(r.company_id) ?? 0) + v);
+      });
+      const lastEntry = new Map<string, string>();
+      (entries ?? []).forEach((r) => {
+        if (!lastEntry.has(r.company_id)) lastEntry.set(r.company_id, r.entry_date);
+      });
+
+      const rows: CompanyRow[] = ((comps ?? []) as Array<{
+        id: string;
+        name: string;
+        contact_email: string | null;
+        location: string | null;
+        industry_type: string | null;
+        created_at: string;
+      }>).map((c) => ({
+        ...c,
+        total_kg: totals.get(c.id) ?? 0,
+        last_entry: lastEntry.get(c.id) ?? null,
+      }));
+      setCompanies(rows);
+      setStatus("ok");
+    })();
+  }, [reloadTick]);
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
+  }
+
+  if (status === "loading") {
     return (
-      <div className="min-h-screen bg-background text-foreground grid place-items-center">
-        <div className="text-sm text-muted-foreground">Verifying clearance…</div>
+      <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
+        Loading…
       </div>
     );
   }
-
-  if (!isAdmin) {
+  if (status === "denied") {
     return (
-      <div className="min-h-screen bg-background text-foreground grid place-items-center px-6">
+      <div className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
         <div className="max-w-md text-center">
           <ShieldAlert className="mx-auto h-10 w-10 text-destructive" />
-          <div className="mt-4 text-xs uppercase tracking-[0.2em] text-data-muted">
-            403 — Restricted
-          </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-            Access Denied — Regulatory Clearance Required
-          </h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            This console is restricted to administrators. If you believe you should have access,
-            contact your compliance lead.
-          </p>
+          <h1 className="mt-4 text-xl font-semibold tracking-tight">Admin access required</h1>
           <Link
             to="/dashboard"
-            className="mt-6 inline-flex items-center gap-1 rounded-md border border-hairline bg-surface px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-elevated"
+            className="mt-6 inline-flex rounded-md border border-hairline bg-surface px-4 py-2 text-sm"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Return to workspace
+            Back to dashboard
           </Link>
         </div>
       </div>
     );
   }
 
-  return <AdminConsole userId={userId!} />;
-}
-
-function AdminConsole({ userId: _userId }: { userId: string }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="hairline-b">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2">
+            <div className="grid h-6 w-6 place-items-center rounded-sm bg-primary text-primary-foreground">
+              <span className="text-[10px] font-bold">CC</span>
+            </div>
+            <span className="text-sm font-semibold tracking-tight">Carbon Clarity · Admin</span>
+          </div>
           <div className="flex items-center gap-3">
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-surface-elevated"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Workspace
+              My dashboard
             </Link>
-            <span className="text-hairline text-muted-foreground">/</span>
-            <span className="text-sm font-semibold tracking-tight">Administrative Portal</span>
+            <button
+              onClick={signOut}
+              className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-surface-elevated"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-10 px-6 py-8">
-        <section>
-          <SectionHeader
-            eyebrow="Tenants"
-            title="Multi-Tenant Overview"
-            description="Every registered client facility. Click a row to enter Auditor View."
-          />
-          <CompaniesTable />
-        </section>
+      <main className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6">
+          <div className="text-xs uppercase tracking-[0.2em] text-data-muted">Administration</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">All client companies</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {companies.length} {companies.length === 1 ? "company" : "companies"} on Carbon Clarity.
+          </p>
+        </div>
 
-        <section>
-          <SectionHeader
-            eyebrow="Ledger"
-            title="Emission Factor Control Console"
-            description="Update coefficients, toggle proxy status, or declare a new fuel sub-type."
-          />
-          <FactorsConsole />
-        </section>
+        <AddCompanyCard onAdded={() => setReloadTick((t) => t + 1)} />
 
-        <section>
-          <SectionHeader
-            eyebrow="Provisioning"
-            title="Register a New Facility"
-            description="Add a supplier company to the ledger."
-          />
-          <ProvisionForm />
-        </section>
-
-        <section>
-          <SectionHeader
-            eyebrow="Hierarchy"
-            title="Facilities & Regional Assignments"
-            description="Provision physical facilities and bind them to regional directors or plant managers."
-          />
-          <FacilitiesConsole />
-        </section>
-
-        <section>
-          <SectionHeader
-            eyebrow="Integration"
-            title="ERP API Keys"
-            description="Generate tokens for automated ingestion at POST /api/v1/entries/bulk. Tokens are shown once — copy them immediately."
-          />
-          <ApiKeysConsole />
+        <section className="mt-8 rounded-md border border-hairline bg-surface">
+          <header className="hairline-b px-6 py-4">
+            <h2 className="text-sm font-semibold tracking-tight">Companies</h2>
+          </header>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-6 py-3 font-medium">Company</th>
+                  <th className="px-6 py-3 font-medium">Contact</th>
+                  <th className="px-6 py-3 font-medium text-right">Total kg CO₂e</th>
+                  <th className="px-6 py-3 font-medium tabular">Last entry</th>
+                  <th className="px-6 py-3 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {companies.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-xs text-muted-foreground">
+                      No companies yet.
+                    </td>
+                  </tr>
+                )}
+                {companies.map((c) => (
+                  <tr key={c.id} className="hairline-t transition-colors hover:bg-surface-elevated">
+                    <td className="px-6 py-3">
+                      <div className="font-medium text-foreground">{c.name}</div>
+                      {(c.industry_type || c.location) && (
+                        <div className="text-xs text-muted-foreground">
+                          {c.location ?? ""}
+                          {c.location && c.industry_type ? " · " : ""}
+                          {c.industry_type ?? ""}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-muted-foreground">{c.contact_email ?? "—"}</td>
+                    <td className="px-6 py-3 text-right tabular">
+                      {c.total_kg.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-3 tabular text-muted-foreground">
+                      {c.last_entry ?? "—"}
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <Link
+                        to="/admin/company/$id"
+                        params={{ id: c.id }}
+                        className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline"
+                      >
+                        View <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </main>
     </div>
   );
 }
 
-
-function SectionHeader({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="mb-4">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-data-muted">{eyebrow}</div>
-      <h2 className="mt-1 text-lg font-semibold tracking-tight">{title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- Companies
-function CompaniesTable() {
-  const q = useQuery({
-    queryKey: ["admin_companies"],
-    queryFn: async () => {
-      const [{ data: companies, error: cErr }, { data: emissions, error: eErr }, { data: entries, error: entErr }] =
-        await Promise.all([
-          supabase.from("companies").select("id, name, location, industry_type, created_at"),
-          supabase.from("calculated_emissions").select("company_id, co2e_kg"),
-          supabase.from("ghg_entries").select("company_id, entry_date"),
-        ]);
-      if (cErr) throw cErr;
-      if (eErr) throw eErr;
-      if (entErr) throw entErr;
-      const totals = new Map<string, number>();
-      (emissions ?? []).forEach((r: { company_id: string; co2e_kg: number }) =>
-        totals.set(r.company_id, (totals.get(r.company_id) ?? 0) + Number(r.co2e_kg)),
-      );
-      const lastActivity = new Map<string, string>();
-      (entries ?? []).forEach((r: { company_id: string; entry_date: string }) => {
-        const cur = lastActivity.get(r.company_id);
-        if (!cur || r.entry_date > cur) lastActivity.set(r.company_id, r.entry_date);
-      });
-      return (companies as Company[]).map((c) => ({
-        ...c,
-        total_kg: totals.get(c.id) ?? 0,
-        last_activity: lastActivity.get(c.id) ?? null,
-      }));
-    },
-  });
-
-  const rows = q.data ?? [];
-
-  return (
-    <div className="overflow-x-auto rounded-md border border-hairline bg-surface">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
-            <th className="px-3 py-2 font-medium">Company</th>
-            <th className="px-3 py-2 font-medium">Location</th>
-            <th className="px-3 py-2 font-medium">Industry</th>
-            <th className="px-3 py-2 text-right font-medium">Cumulative (t CO₂e)</th>
-            <th className="px-3 py-2 font-medium">Last Activity</th>
-            <th className="px-3 py-2 font-medium"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                {q.isLoading ? "Loading tenants…" : "No companies registered."}
-              </td>
-            </tr>
-          )}
-          {rows.map((c) => (
-            <tr
-              key={c.id}
-              className="border-b border-hairline last:border-b-0 hover:bg-surface-elevated/60"
-            >
-              <td className="px-3 py-2 font-medium text-foreground">{c.name}</td>
-              <td className="px-3 py-2 text-muted-foreground">{c.location ?? "—"}</td>
-              <td className="px-3 py-2 text-muted-foreground">{c.industry_type ?? "—"}</td>
-              <td className="px-3 py-2 text-right tabular text-foreground">
-                {(c.total_kg / 1000).toFixed(3)}
-              </td>
-              <td className="px-3 py-2 tabular text-muted-foreground">
-                {c.last_activity ?? "—"}
-              </td>
-              <td className="px-3 py-2 text-right">
-                <Link
-                  to="/admin/company/$id"
-                  params={{ id: c.id }}
-                  className="inline-flex items-center gap-1 rounded-md border border-hairline bg-surface-elevated px-2 py-1 text-xs text-foreground hover:bg-accent"
-                >
-                  Auditor View
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- Factors
-function FactorsConsole() {
-  const qc = useQueryClient();
-  const q = useQuery({
-    queryKey: ["admin_factors"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("emission_factors")
-        .select("id, scope, category, sub_type, unit, co2e_factor, is_proxy_data, source, version_year")
-        .order("scope")
-        .order("category")
-        .order("sub_type");
-      if (error) throw error;
-      return (data ?? []) as Factor[];
-    },
-  });
-
-  const [drafts, setDrafts] = useState<Record<string, Partial<Factor>>>({});
-  const factors = q.data ?? [];
-
-  function setDraft(id: string, patch: Partial<Factor>) {
-    setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
-  }
-
-  async function saveRow(f: Factor) {
-    const patch = drafts[f.id];
-    if (!patch) return;
-    const { error } = await supabase
-      .from("emission_factors")
-      .update(patch)
-      .eq("id", f.id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Factor updated.");
-    setDrafts((d) => {
-      const n = { ...d };
-      delete n[f.id];
-      return n;
-    });
-    qc.invalidateQueries({ queryKey: ["admin_factors"] });
-    qc.invalidateQueries({ queryKey: ["emission_factors"] });
-    qc.invalidateQueries({ queryKey: ["emission_factors_all"] });
-  }
-
-  async function deleteRow(f: Factor) {
-    if (!confirm(`Delete factor "${f.sub_type ?? f.category}"?`)) return;
-    const { error } = await supabase.from("emission_factors").delete().eq("id", f.id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Factor deleted.");
-    qc.invalidateQueries({ queryKey: ["admin_factors"] });
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto rounded-md border border-hairline bg-surface">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
-              <th className="px-3 py-2 font-medium">Scope</th>
-              <th className="px-3 py-2 font-medium">Category</th>
-              <th className="px-3 py-2 font-medium">Sub-Type</th>
-              <th className="px-3 py-2 font-medium">Unit</th>
-              <th className="px-3 py-2 text-right font-medium">Coefficient (kg CO₂e / unit)</th>
-              <th className="px-3 py-2 font-medium">Source</th>
-              <th className="px-3 py-2 font-medium">Year</th>
-              <th className="px-3 py-2 text-center font-medium">Proxy</th>
-              <th className="px-3 py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {factors.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {q.isLoading ? "Loading factors…" : "No factors."}
-                </td>
-              </tr>
-            )}
-            {factors.map((f) => {
-              const draft = drafts[f.id] ?? {};
-              const dirty = Object.keys(draft).length > 0;
-              return (
-                <tr key={f.id} className="border-b border-hairline last:border-b-0">
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {f.scope.replace("_", " ")}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">{f.category}</td>
-                  <td className="px-3 py-2 min-w-[220px]">
-                    <Input
-                      value={draft.sub_type ?? f.sub_type ?? ""}
-                      onChange={(e) => setDraft(f.id, { sub_type: e.target.value })}
-                      className="h-8"
-                    />
-                  </td>
-                  <td className="px-3 py-2 w-[90px]">
-                    <Input
-                      value={draft.unit ?? f.unit}
-                      onChange={(e) => setDraft(f.id, { unit: e.target.value })}
-                      className="h-8 tabular"
-                    />
-                  </td>
-                  <td className="px-3 py-2 w-[160px]">
-                    <Input
-                      type="number"
-                      step="any"
-                      value={draft.co2e_factor ?? f.co2e_factor}
-                      onChange={(e) =>
-                        setDraft(f.id, { co2e_factor: Number(e.target.value) })
-                      }
-                      className="h-8 text-right tabular"
-                    />
-                  </td>
-                  <td className="px-3 py-2 min-w-[220px]">
-                    <Input
-                      value={draft.source ?? f.source ?? ""}
-                      onChange={(e) => setDraft(f.id, { source: e.target.value })}
-                      className="h-8"
-                    />
-                  </td>
-                  <td className="px-3 py-2 w-[90px]">
-                    <Input
-                      value={draft.version_year ?? f.version_year ?? ""}
-                      onChange={(e) => setDraft(f.id, { version_year: e.target.value })}
-                      className="h-8 tabular"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <Switch
-                      checked={draft.is_proxy_data ?? f.is_proxy_data}
-                      onCheckedChange={(v) => setDraft(f.id, { is_proxy_data: v })}
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!dirty}
-                        onClick={() => saveRow(f)}
-                        className="h-7 gap-1 border-hairline"
-                      >
-                        <Save className="h-3 w-3" />
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteRow(f)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <NewFactorForm />
-    </div>
-  );
-}
-
-function NewFactorForm() {
-  const qc = useQueryClient();
-  const [scope, setScope] = useState<Scope>("scope_1");
-  const [category, setCategory] = useState("");
-  const [subType, setSubType] = useState("");
-  const [unit, setUnit] = useState("");
-  const [coef, setCoef] = useState("");
-  const [source, setSource] = useState("");
-  const [year, setYear] = useState("");
-  const [proxy, setProxy] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    const { error } = await supabase.from("emission_factors").insert({
-      scope,
-      category,
-      sub_type: subType || null,
-      unit,
-      co2e_factor: Number(coef),
-      source: source || null,
-      version_year: year || null,
-      is_proxy_data: proxy,
-    });
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("New emission factor added.");
-    setCategory("");
-    setSubType("");
-    setUnit("");
-    setCoef("");
-    setSource("");
-    setYear("");
-    setProxy(false);
-    qc.invalidateQueries({ queryKey: ["admin_factors"] });
-    qc.invalidateQueries({ queryKey: ["emission_factors"] });
-    qc.invalidateQueries({ queryKey: ["emission_factors_all"] });
-  }
-
-  return (
-    <form
-      onSubmit={submit}
-      className="rounded-md border border-hairline bg-surface p-4"
-    >
-      <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-data-muted">
-        <Plus className="h-3.5 w-3.5" />
-        Declare new factor
-      </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Select value={scope} onValueChange={(v) => setScope(v as Scope)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="scope_1">Scope 1</SelectItem>
-            <SelectItem value="scope_2">Scope 2</SelectItem>
-            <SelectItem value="scope_3">Scope 3</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input placeholder="Category" required value={category} onChange={(e) => setCategory(e.target.value)} />
-        <Input placeholder="Sub-type" value={subType} onChange={(e) => setSubType(e.target.value)} />
-        <Input placeholder="Unit (e.g. litre, kWh)" required value={unit} onChange={(e) => setUnit(e.target.value)} />
-        <Input placeholder="Coefficient (kg CO₂e/unit)" required type="number" step="any" value={coef} onChange={(e) => setCoef(e.target.value)} className="tabular" />
-        <Input placeholder="Source" value={source} onChange={(e) => setSource(e.target.value)} />
-        <Input placeholder="Version year" value={year} onChange={(e) => setYear(e.target.value)} className="tabular" />
-        <div className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-background px-3">
-          <span className="text-xs text-muted-foreground">Proxy data</span>
-          <Switch checked={proxy} onCheckedChange={setProxy} />
-        </div>
-      </div>
-      <div className="mt-4">
-        <Button type="submit" disabled={busy} className="gap-1">
-          <Plus className="h-3.5 w-3.5" />
-          {busy ? "Adding…" : "Add factor"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-// ---------------------------------------------------------------- Provisioning
-function ProvisionForm() {
-  const qc = useQueryClient();
+function AddCompanyCard({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
-  const [industry, setIndustry] = useState("");
-  const [location, setLocation] = useState("");
-  const [contactPerson, setContactPerson] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [location, setLocation] = useState("");
+  const [industryType, setIndustryType] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  async function submit(e: FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    const { error } = await supabase.from("companies").insert({
-      name,
-      industry_type: industry || null,
-      location: location || null,
-      contact_person: contactPerson || null,
-      contact_email: contactEmail || null,
-    });
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
+    setError(null);
+    setSuccess(null);
+    if (!name.trim()) {
+      setError("Company name is required.");
       return;
     }
-    toast.success("Facility registered.");
-    setName("");
-    setIndustry("");
-    setLocation("");
-    setContactPerson("");
-    setContactEmail("");
-    qc.invalidateQueries({ queryKey: ["admin_companies"] });
-  }
-
-  return (
-    <form onSubmit={submit} className="rounded-md border border-hairline bg-surface p-5">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <FieldLabel label="Company name" required>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Acme Manufacturing Pvt Ltd" />
-        </FieldLabel>
-        <FieldLabel label="Industry classification">
-          <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Pharmaceuticals / NIC 21001" />
-        </FieldLabel>
-        <FieldLabel label="Regional factory hub">
-          <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Baddi, HP" />
-        </FieldLabel>
-        <FieldLabel label="Primary contact">
-          <Input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="Priya Sharma" />
-        </FieldLabel>
-        <FieldLabel label="Contact email">
-          <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="ops@acme.co" />
-        </FieldLabel>
-      </div>
-      <div className="mt-5">
-        <Button type="submit" disabled={busy} className="gap-1">
-          <Plus className="h-3.5 w-3.5" />
-          {busy ? "Registering…" : "Register facility"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function FieldLabel({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        {label} {required && <span className="text-destructive">*</span>}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-
-// ---------------------------------------------------------------- Facilities
-type CompanyRow = { id: string; name: string };
-type FacilityRow = { id: string; name: string; region: string; company_id: string; created_at: string };
-type ProfileRow = { id: string; full_name: string | null; company_id: string | null; assigned_region: string | null; assigned_facility_id: string | null };
-
-function FacilitiesConsole() {
-  const qc = useQueryClient();
-  const companiesQ = useQuery({
-    queryKey: ["admin_companies_simple"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("companies").select("id, name").order("name");
-      if (error) throw error;
-      return (data ?? []) as CompanyRow[];
-    },
-  });
-  const facilitiesQ = useQuery({
-    queryKey: ["admin_facilities"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("facilities")
-        .select("id, name, region, company_id, created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as FacilityRow[];
-    },
-  });
-  const profilesQ = useQuery({
-    queryKey: ["admin_profiles"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, company_id, assigned_region, assigned_facility_id");
-      if (error) throw error;
-      return (data ?? []) as ProfileRow[];
-    },
-  });
-
-  const [companyId, setCompanyId] = useState("");
-  const [fname, setFname] = useState("");
-  const [region, setRegion] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const companyName = (id: string) =>
-    (companiesQ.data ?? []).find((c) => c.id === id)?.name ?? "—";
-
-  async function createFacility(e: FormEvent) {
-    e.preventDefault();
-    if (!companyId) return toast.error("Pick a company.");
-    setBusy(true);
-    const { error } = await supabase.from("facilities").insert({
-      company_id: companyId,
-      name: fname,
-      region,
+    setSubmitting(true);
+    const { error: insErr } = await supabase.from("companies").insert({
+      name: name.trim(),
+      contact_email: contactEmail.trim() || null,
+      location: location.trim() || null,
+      industry_type: industryType.trim() || null,
     });
-    setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success("Facility provisioned.");
-    setFname("");
-    setRegion("");
-    qc.invalidateQueries({ queryKey: ["admin_facilities"] });
-  }
-
-  async function deleteFacility(id: string) {
-    if (!confirm("Delete this facility? Entries linked to it will remain but lose their facility reference.")) return;
-    const { error } = await supabase.from("facilities").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Facility removed.");
-    qc.invalidateQueries({ queryKey: ["admin_facilities"] });
-  }
-
-  async function assignDirector(profileId: string, patch: Partial<ProfileRow>) {
-    const { error } = await supabase.from("profiles").update(patch).eq("id", profileId);
-    if (error) return toast.error(error.message);
-    toast.success("Assignment updated.");
-    qc.invalidateQueries({ queryKey: ["admin_profiles"] });
-  }
-
-  return (
-    <div className="space-y-6">
-      <form onSubmit={createFacility} className="rounded-md border border-hairline bg-surface p-4">
-        <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-data-muted">
-          <Plus className="h-3.5 w-3.5" /> Provision new facility
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <Select value={companyId} onValueChange={setCompanyId}>
-            <SelectTrigger><SelectValue placeholder="Company" /></SelectTrigger>
-            <SelectContent>
-              {(companiesQ.data ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input required placeholder="Facility name (e.g. Baddi Plant #2)" value={fname} onChange={(e) => setFname(e.target.value)} />
-          <Input required placeholder="Region (e.g. North India)" value={region} onChange={(e) => setRegion(e.target.value)} />
-          <Button type="submit" disabled={busy} className="gap-1">
-            <Plus className="h-3.5 w-3.5" /> {busy ? "Adding…" : "Add facility"}
-          </Button>
-        </div>
-      </form>
-
-      <div className="overflow-x-auto rounded-md border border-hairline bg-surface">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
-              <th className="px-3 py-2 font-medium">Facility</th>
-              <th className="px-3 py-2 font-medium">Region</th>
-              <th className="px-3 py-2 font-medium">Company</th>
-              <th className="px-3 py-2 font-medium">Created</th>
-              <th className="px-3 py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(facilitiesQ.data ?? []).length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {facilitiesQ.isLoading ? "Loading facilities…" : "No facilities provisioned."}
-                </td>
-              </tr>
-            )}
-            {(facilitiesQ.data ?? []).map((f) => (
-              <tr key={f.id} className="border-b border-hairline last:border-b-0 hover:bg-surface-elevated/60">
-                <td className="px-3 py-2 font-medium text-foreground">{f.name}</td>
-                <td className="px-3 py-2 text-muted-foreground">{f.region}</td>
-                <td className="px-3 py-2 text-muted-foreground">{companyName(f.company_id)}</td>
-                <td className="px-3 py-2 tabular text-muted-foreground">{f.created_at.slice(0, 10)}</td>
-                <td className="px-3 py-2 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => deleteFacility(f.id)} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Director / Plant Manager assignments */}
-      <div className="rounded-md border border-hairline bg-surface">
-        <div className="border-b border-hairline px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-data-muted">
-          User Assignments
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
-              <th className="px-3 py-2 font-medium">User</th>
-              <th className="px-3 py-2 font-medium">Company</th>
-              <th className="px-3 py-2 font-medium">Assigned Region</th>
-              <th className="px-3 py-2 font-medium">Assigned Facility</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(profilesQ.data ?? []).map((p) => {
-              const facilitiesForCompany = (facilitiesQ.data ?? []).filter((f) => f.company_id === p.company_id);
-              const regions = Array.from(new Set(facilitiesForCompany.map((f) => f.region)));
-              return (
-                <tr key={p.id} className="border-b border-hairline last:border-b-0">
-                  <td className="px-3 py-2 text-foreground">{p.full_name ?? p.id.slice(0, 8)}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{p.company_id ? companyName(p.company_id) : "—"}</td>
-                  <td className="px-3 py-2 min-w-[180px]">
-                    <Select
-                      value={p.assigned_region ?? "__none"}
-                      onValueChange={(v) => assignDirector(p.id, { assigned_region: v === "__none" ? null : v })}
-                    >
-                      <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none">— none —</SelectItem>
-                        {regions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="px-3 py-2 min-w-[220px]">
-                    <Select
-                      value={p.assigned_facility_id ?? "__none"}
-                      onValueChange={(v) => assignDirector(p.id, { assigned_facility_id: v === "__none" ? null : v })}
-                    >
-                      <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none">— none —</SelectItem>
-                        {facilitiesForCompany.map((f) => (
-                          <SelectItem key={f.id} value={f.id}>{f.name} · {f.region}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- API keys
-type ApiKeyRow = {
-  id: string;
-  name: string;
-  company_id: string;
-  created_at: string;
-  last_used_at: string | null;
-};
-
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function generateRawKey(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `cc_live_${hex}`;
-}
-
-function ApiKeysConsole() {
-  const qc = useQueryClient();
-  const companiesQ = useQuery({
-    queryKey: ["admin_companies_simple"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("companies").select("id, name").order("name");
-      if (error) throw error;
-      return (data ?? []) as CompanyRow[];
-    },
-  });
-  const keysQ = useQuery({
-    queryKey: ["admin_api_keys"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("api_keys")
-        .select("id, name, company_id, created_at, last_used_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as ApiKeyRow[];
-    },
-  });
-
-  const [companyId, setCompanyId] = useState("");
-  const [name, setName] = useState("");
-  const [revealed, setRevealed] = useState<{ id: string; token: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const companyName = (id: string) => (companiesQ.data ?? []).find((c) => c.id === id)?.name ?? "—";
-
-  async function generate(e: FormEvent) {
-    e.preventDefault();
-    if (!companyId) return toast.error("Pick a company.");
-    setBusy(true);
-    const raw = generateRawKey();
-    const hashed = await sha256Hex(raw);
-    const { data: user } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from("api_keys")
-      .insert({
-        company_id: companyId,
-        name,
-        hashed_key: hashed,
-        created_by: user.user?.id ?? null,
-      })
-      .select("id")
-      .single();
-    setBusy(false);
-    if (error) return toast.error(error.message);
-    setRevealed({ id: data.id, token: raw });
+    setSubmitting(false);
+    if (insErr) {
+      setError(insErr.message);
+      return;
+    }
+    setSuccess("Company added.");
     setName("");
-    qc.invalidateQueries({ queryKey: ["admin_api_keys"] });
-  }
-
-  async function revoke(id: string) {
-    if (!confirm("Revoke this API key? Any ERP integration using it will stop working immediately.")) return;
-    const { error } = await supabase.from("api_keys").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Key revoked.");
-    qc.invalidateQueries({ queryKey: ["admin_api_keys"] });
+    setContactEmail("");
+    setLocation("");
+    setIndustryType("");
+    onAdded();
+    setTimeout(() => setSuccess(null), 2500);
   }
 
   return (
-    <div className="space-y-4">
-      <form onSubmit={generate} className="rounded-md border border-hairline bg-surface p-4">
-        <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-data-muted">
-          <KeyRound className="h-3.5 w-3.5" /> Generate integration token
+    <section className="rounded-md border border-hairline bg-surface">
+      <header className="hairline-b px-6 py-4">
+        <h2 className="text-sm font-semibold tracking-tight">Add a new client company</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          You can link a user account to this company later via the database.
+        </p>
+      </header>
+      <form onSubmit={submit} className="grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-4">
+        <div>
+          <Label>Company name *</Label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-hairline bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Select value={companyId} onValueChange={setCompanyId}>
-            <SelectTrigger><SelectValue placeholder="Company" /></SelectTrigger>
-            <SelectContent>
-              {(companiesQ.data ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input required placeholder="Label (e.g. SAP ERP Integration)" value={name} onChange={(e) => setName(e.target.value)} />
-          <Button type="submit" disabled={busy} className="gap-1">
-            <KeyRound className="h-3.5 w-3.5" /> {busy ? "Minting…" : "Generate token"}
-          </Button>
+        <div>
+          <Label>Contact email</Label>
+          <input
+            type="email"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+            className="mt-1 w-full rounded-md border border-hairline bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <div>
+          <Label>Location</Label>
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="mt-1 w-full rounded-md border border-hairline bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="e.g. Pune, MH"
+          />
+        </div>
+        <div>
+          <Label>Industry</Label>
+          <input
+            value={industryType}
+            onChange={(e) => setIndustryType(e.target.value)}
+            className="mt-1 w-full rounded-md border border-hairline bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="e.g. Cement"
+          />
+        </div>
+        <div className="md:col-span-4 flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {submitting ? "Adding…" : "Add company"}
+          </button>
+          {error && <span className="text-xs text-destructive">{error}</span>}
+          {success && <span className="text-xs text-data-muted">{success}</span>}
         </div>
       </form>
-
-      {revealed && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4">
-          <div className="text-[11px] uppercase tracking-[0.14em] text-amber-300">Shown once — copy now</div>
-          <div className="mt-2 flex items-center gap-2">
-            <code className="tabular block flex-1 overflow-x-auto rounded bg-background/60 px-3 py-2 text-xs text-foreground">
-              {revealed.token}
-            </code>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1 border-hairline"
-              onClick={() => {
-                navigator.clipboard.writeText(revealed.token);
-                toast.success("Copied to clipboard.");
-              }}
-            >
-              <Copy className="h-3 w-3" /> Copy
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setRevealed(null)}>Dismiss</Button>
-          </div>
-          <div className="mt-2 text-xs text-amber-200/80">
-            Use as <code className="rounded bg-background/40 px-1 py-0.5">Authorization: Bearer &lt;token&gt;</code> against <code className="rounded bg-background/40 px-1 py-0.5">POST /api/v1/entries/bulk</code>.
-          </div>
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-md border border-hairline bg-surface">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-data-muted">
-              <th className="px-3 py-2 font-medium">Label</th>
-              <th className="px-3 py-2 font-medium">Company</th>
-              <th className="px-3 py-2 font-medium">Created</th>
-              <th className="px-3 py-2 font-medium">Last Used</th>
-              <th className="px-3 py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(keysQ.data ?? []).length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {keysQ.isLoading ? "Loading keys…" : "No API keys minted yet."}
-                </td>
-              </tr>
-            )}
-            {(keysQ.data ?? []).map((k) => (
-              <tr key={k.id} className="border-b border-hairline last:border-b-0">
-                <td className="px-3 py-2 text-foreground">{k.name}</td>
-                <td className="px-3 py-2 text-muted-foreground">{companyName(k.company_id)}</td>
-                <td className="px-3 py-2 tabular text-muted-foreground">{k.created_at.slice(0, 10)}</td>
-                <td className="px-3 py-2 tabular text-muted-foreground">{k.last_used_at ? k.last_used_at.slice(0, 10) : "—"}</td>
-                <td className="px-3 py-2 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => revoke(k.id)} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </section>
   );
 }
 
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="text-xs uppercase tracking-wider text-muted-foreground">{children}</label>
+  );
+}
