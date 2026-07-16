@@ -14,69 +14,28 @@ export type Database = {
   }
   public: {
     Tables: {
-      api_keys: {
-        Row: {
-          company_id: string
-          created_at: string
-          created_by: string | null
-          hashed_key: string
-          id: string
-          last_used_at: string | null
-          name: string
-        }
-        Insert: {
-          company_id: string
-          created_at?: string
-          created_by?: string | null
-          hashed_key: string
-          id?: string
-          last_used_at?: string | null
-          name: string
-        }
-        Update: {
-          company_id?: string
-          created_at?: string
-          created_by?: string | null
-          hashed_key?: string
-          id?: string
-          last_used_at?: string | null
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "api_keys_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       calculated_emissions: {
         Row: {
           calculated_at: string
-          co2e_kg: number
+          co2e_kg: number | null
           company_id: string
           entry_id: string
-          facility_id: string | null
           factor_id_used: string | null
           id: string
         }
         Insert: {
           calculated_at?: string
-          co2e_kg: number
+          co2e_kg?: number | null
           company_id: string
           entry_id: string
-          facility_id?: string | null
           factor_id_used?: string | null
           id?: string
         }
         Update: {
           calculated_at?: string
-          co2e_kg?: number
+          co2e_kg?: number | null
           company_id?: string
           entry_id?: string
-          facility_id?: string | null
           factor_id_used?: string | null
           id?: string
         }
@@ -93,13 +52,6 @@ export type Database = {
             columns: ["entry_id"]
             isOneToOne: false
             referencedRelation: "ghg_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "calculated_emissions_facility_id_fkey"
-            columns: ["facility_id"]
-            isOneToOne: false
-            referencedRelation: "facilities"
             referencedColumns: ["id"]
           },
           {
@@ -180,49 +132,14 @@ export type Database = {
         }
         Relationships: []
       }
-      facilities: {
-        Row: {
-          company_id: string
-          created_at: string
-          id: string
-          name: string
-          region: string
-        }
-        Insert: {
-          company_id: string
-          created_at?: string
-          id?: string
-          name: string
-          region: string
-        }
-        Update: {
-          company_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          region?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "facilities_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       ghg_entries: {
         Row: {
           category: string
           company_id: string
-          corrects_entry_id: string | null
           created_at: string
           entered_by: string
           entry_date: string
-          facility_id: string | null
           id: string
-          locked_at: string
           notes: string | null
           quantity: number
           reporting_period: string
@@ -233,13 +150,10 @@ export type Database = {
         Insert: {
           category: string
           company_id: string
-          corrects_entry_id?: string | null
           created_at?: string
           entered_by: string
           entry_date: string
-          facility_id?: string | null
           id?: string
-          locked_at?: string
           notes?: string | null
           quantity: number
           reporting_period: string
@@ -250,13 +164,10 @@ export type Database = {
         Update: {
           category?: string
           company_id?: string
-          corrects_entry_id?: string | null
           created_at?: string
           entered_by?: string
           entry_date?: string
-          facility_id?: string | null
           id?: string
-          locked_at?: string
           notes?: string | null
           quantity?: number
           reporting_period?: string
@@ -272,55 +183,28 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "ghg_entries_corrects_entry_id_fkey"
-            columns: ["corrects_entry_id"]
-            isOneToOne: false
-            referencedRelation: "ghg_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ghg_entries_facility_id_fkey"
-            columns: ["facility_id"]
-            isOneToOne: false
-            referencedRelation: "facilities"
-            referencedColumns: ["id"]
-          },
         ]
       }
       profiles: {
         Row: {
-          assigned_facility_id: string | null
-          assigned_region: string | null
           company_id: string | null
           created_at: string
           full_name: string | null
           id: string
         }
         Insert: {
-          assigned_facility_id?: string | null
-          assigned_region?: string | null
           company_id?: string | null
           created_at?: string
           full_name?: string | null
           id: string
         }
         Update: {
-          assigned_facility_id?: string | null
-          assigned_region?: string | null
           company_id?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "profiles_assigned_facility_id_fkey"
-            columns: ["assigned_facility_id"]
-            isOneToOne: false
-            referencedRelation: "facilities"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "profiles_company_id_fkey"
             columns: ["company_id"]
@@ -353,12 +237,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      can_access_scope: {
-        Args: { _company_id: string; _facility_id: string }
-        Returns: boolean
-      }
       current_user_company_id: { Args: never; Returns: string }
-      facility_region: { Args: { _facility_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -366,17 +245,10 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_global_admin: { Args: never; Returns: boolean }
-      user_assigned_facility_id: { Args: never; Returns: string }
-      user_assigned_region: { Args: never; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
-      app_role:
-        | "admin"
-        | "user"
-        | "global_admin"
-        | "regional_director"
-        | "plant_manager"
+      app_role: "admin" | "client"
       ghg_scope: "scope_1" | "scope_2" | "scope_3"
     }
     CompositeTypes: {
@@ -505,13 +377,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: [
-        "admin",
-        "user",
-        "global_admin",
-        "regional_director",
-        "plant_manager",
-      ],
+      app_role: ["admin", "client"],
       ghg_scope: ["scope_1", "scope_2", "scope_3"],
     },
   },
