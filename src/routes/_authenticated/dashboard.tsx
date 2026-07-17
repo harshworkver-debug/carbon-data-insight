@@ -5,6 +5,17 @@ import { CompanyData } from "@/components/company-data";
 import { ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  beforeLoad: async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userData.user.id);
+    if ((roles ?? []).some((r) => r.role === "admin")) {
+      throw redirect({ to: "/admin" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Dashboard — Carbon Clarity" },
